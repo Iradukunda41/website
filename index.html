@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>World Explorer — Discover Every Country</title>
+
+  <meta name="description" content="Browse, search, and explore every country in the world. Powered by REST Countries API." />
+
+  <link rel="stylesheet" href="css/style.css" />
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>" />
+</head>
+
+<body>
+
+  <!-- ── Header ── -->
+  <header class="site-header" role="banner">
+    <div class="header-inner">
+      <div class="site-logo">🌍 World<span>Explorer</span></div>
+    </div>
+  </header>
+
+  <!-- ── Stats bar ── -->
+  <div class="stats-bar" role="status" aria-live="polite">
+    <div class="stats-inner">
+      <div id="stats-bar" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <!-- ── Controls ── -->
+  <div class="controls-bar" role="search">
+
+    <!-- Search -->
+    <div class="search-wrap">
+      <span class="search-icon" aria-hidden="true">🔍</span>
+      <input
+        type="search"
+        id="search"
+        placeholder="Search by country or capital…"
+        aria-label="Search countries"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <!-- Region filter -->
+    <select id="region-filter" class="controls-select" aria-label="Filter by region">
+      <option value="all">All regions</option>
+      <option value="Africa">Africa</option>
+      <option value="Americas">Americas</option>
+      <option value="Asia">Asia</option>
+      <option value="Europe">Europe</option>
+      <option value="Oceania">Oceania</option>
+      <option value="Antarctic">Antarctic</option>
+    </select>
+
+    <!-- Sort -->
+    <select id="sort-by" class="controls-select" aria-label="Sort countries by">
+      <option value="name">A → Z</option>
+      <option value="population">By population</option>
+      <option value="area">By area</option>
+    </select>
+
+    <!-- Favorites toggle -->
+    <button
+      id="fav-toggle"
+      aria-pressed="false"
+      title="Show favourites only"
+    >
+      ☆ Favourites
+    </button>
+
+    <!-- Result count -->
+    <span class="result-count" id="result-count" aria-live="polite"></span>
+  </div>
+
+  <!-- ── Grid ── -->
+  <main class="grid-wrap">
+    <div id="country-grid" role="list" aria-label="Countries"></div>
+  </main>
+
+  <!-- ── Overlay ── -->
+  <div id="overlay" aria-hidden="true"></div>
+
+  <!-- ── Detail panel ── -->
+  <aside
+    id="detail-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Country details"
+    aria-hidden="true"
+  >
+    <button id="detail-close" class="detail-close-btn" aria-label="Close detail panel">
+      ← Back to all countries
+    </button>
+
+    <div id="detail-loading" role="status">
+      Loading country details…
+    </div>
+
+    <div id="detail-error" hidden role="alert"></div>
+
+    <div id="detail-inner"></div>
+  </aside>
+
+  <!-- ── JS (ONLY ONE SCRIPT — IMPORTANT FOR CAPSTONE) ── -->
+  <script type="module" src="js/main.js"></script>
+
+  <!-- ── Accessibility sync for panel state ── -->
+  <script>
+    const panel = document.getElementById('detail-panel');
+
+    const observer = new MutationObserver(() => {
+      const isOpen = panel.classList.contains('open');
+      panel.setAttribute('aria-hidden', String(!isOpen));
+    });
+
+    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
+  </script>
+
+</body>
+</html>
