@@ -1,246 +1,199 @@
-import { fetchAllCountries, fetchCountryDetails } from "./api.js";
-import {
-  renderGrid,
-  renderDetail,
-  renderSkeletons,
-  renderEmpty,
-  renderError,
-  renderStatsBar,
-} from "./render.js";
+/**
+ * main.js — Wiring layer
+ * Owns all application state. Wires events to API calls and renders.
+ * Imports from api.js and render.js; never builds DOM directly.
+ */
 
-/* ─────────────────────────────────────────────
-   STATE
-──────────────────────────────────────────── */
+import { fetchManyCities, fetchCityDetail } from './api.js';
+import { renderGrid, renderDetail, showState } from './render.js';
+
+/* ── Default cities loaded on start ─────────────────────────── */
+const DEFAULT_CITIES = [
+  'Kigali',
+  'London',
+  'New York',
+  'Tokyo',
+  'Sydney',
+  'Lagos',
+  'Berlin',
+  'Mumbai',
+  'São Paulo',
+  'Cairo',
+  'Toronto',
+  'Dubai',
+];
+
+/* ── App state ───────────────────────────────────────────────── */
 const state = {
-  allCountries: [],
-  filtered: [],
-  query: "",
-  region: "all",
-  sort: "name",
-  favorites: new Set(),
-  showFavs: false,
-  loading: false,
-  error: null,
-  detailOpen: false,
+  allData:    [],   // WeatherData[] — full set currently loaded
+  filter:     'all',
+  query:      '',
+  favSet:     new Set(JSON.parse(localStorage.getItem('skyline-favs') || '[]')),
+  debounceTimer: null,
 };
 
-/* ─────────────────────────────────────────────
-   DOM ELEMENTS
-──────────────────────────────────────────── */
-const grid = document.getElementById("country-grid");
-const searchInput = document.getElementById("search");
-const regionSelect = document.getElementById("region-filter");
-const sortSelect = document.getElementById("sort-by");
-const statsBar = document.getElementById("stats-bar");
-const resultCount = document.getElementById("result-count");
+/* ── DOM refs ───────────────────────────────────────────────── */
+const grid        = document.getElementById('city-grid');
+const searchInput = document.getElementById('city-search');
+const searchBtn   = document.getElementById('search-btn');
+const retryBtn    = document.getElementById('retry-btn');
+const filterBtns  = document.querySelectorAll('.filter-btn');
+const overlay     = document.getElementById('detail-overlay');
+const detailClose = document.getElementById('detail-close');
 
-const detailPanel = document.getElementById("detail-panel");
-const detailInner = document.getElementById("detail-inner");
-const detailClose = document.getElementById("detail-close");
-const detailLoading = document.getElementById("detail-loading");
-const detailError = document.getElementById("detail-error");
+/* ── State IDs for showState helper ─────────────────────────── */
+const GRID_STATES = ['loading-state', 'error-state', 'empty-state'];
 
-const overlay = document.getElementById("overlay");
-const favToggle = document.getElementById("fav-toggle");
+function hideAllStates() {
+  GRID_STATES.forEach(id => { document.getElementById(id).hidden = true; });
+}
 
-/* ─────────────────────────────────────────────
-   FILTER + SORT LOGIC
-──────────────────────────────────────────── */
-function applyFilters() {
-  let results = [...state.allCountries];
+/* ── Persist favourites ──────────────────────────────────────── */
+function saveFavs() {
+  localStorage.setItem('skyline-favs', JSON.stringify([...state.favSet]));
+}
 
-  // Favorites filter
-  if (state.showFavs) {
-    results = results.filter((c) => state.favorites.has(c.code));
-  }
+/* ── Repaint the grid with current filter/query ─────────────── */
+function repaintGrid() {
+  hideAllStates();
 
-  // Region filter
-  if (state.region !== "all") {
-    results = results.filter((c) => c.region === state.region);
-  }
-
-  // Search filter
-  if (state.query) {
-    const q = state.query.toLowerCase();
-    results = results.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.capital.toLowerCase().includes(q) ||
-        c.officialName.toLowerCase().includes(q)
-    );
-  }
-
-  // Sorting
-  results.sort((a, b) => {
-    if (state.sort === "name") return a.name.localeCompare(b.name);
-    if (state.sort === "population") return b.population - a.population;
-    if (state.sort === "area") return (b.area || 0) - (a.area || 0);
-    return 0;
+  const { filtered } = renderGrid(grid, state.allData, {
+    filter:  state.filter,
+    query:   state.query,
+    onOpen:  openDetail,
+    onFav:   toggleFav,
+    favSet:  state.favSet,
   });
 
-  state.filtered = results;
-}
-
-/* ─────────────────────────────────────────────
-   UI UPDATE
-──────────────────────────────────────────── */
-function updateUI() {
-  applyFilters();
-
-  if (state.error) {
-    renderError(grid, state.error, init);
-    return;
-  }
-
-  renderStatsBar(state.filtered, statsBar);
-
-  resultCount.textContent = `${state.filtered.length} / ${state.allCountries.length} countries`;
-
-  if (!state.filtered.length) {
-    renderEmpty(grid, state.query);
-    return;
-  }
-
-  renderGrid(state.filtered, grid, openDetail);
-}
-
-/* ─────────────────────────────────────────────
-   DETAIL VIEW (Promise.all used here ✔)
-──────────────────────────────────────────── */
-async function openDetail(code) {
-  detailPanel.classList.add("open");
-  overlay.classList.add("visible");
-  document.body.classList.add("panel-open");
-
-  detailInner.innerHTML = "";
-  detailLoading.hidden = false;
-  detailError.hidden = true;
-
-  state.detailOpen = true;
-
-  history.pushState({ code }, "", `#${code}`);
-
-  try {
-    const data = await fetchCountryDetails(code);
-
-    const country = data.country;
-    const borders = data.borders;
-
-    detailLoading.hidden = true;
-    renderDetail(country, borders, detailInner);
-
-    // Wire border clicks
-    detailInner.querySelectorAll(".border-chip").forEach((btn) => {
-      btn.addEventListener("click", () => openDetail(btn.dataset.code));
-    });
-  } catch (err) {
-    detailLoading.hidden = true;
-    detailError.hidden = false;
-    detailError.textContent = "Failed to load country details.";
+  if (filtered.length === 0) {
+    showState(GRID_STATES, 'empty-state');
+    const qEl = document.getElementById('empty-query');
+    qEl.textContent = state.query
+      ? `"${state.query}" with filter "${state.filter}"`
+      : `filter "${state.filter}"`;
   }
 }
 
-/* ─────────────────────────────────────────────
-   CLOSE DETAIL
-──────────────────────────────────────────── */
-function closeDetail() {
-  detailPanel.classList.remove("open");
-  overlay.classList.remove("visible");
-  document.body.classList.remove("panel-open");
-
-  state.detailOpen = false;
-
-  history.pushState({}, "", window.location.pathname);
-}
-
-/* ─────────────────────────────────────────────
-   FAVORITES
-──────────────────────────────────────────── */
-function toggleFavorite(code) {
-  if (state.favorites.has(code)) {
-    state.favorites.delete(code);
+/* ── Toggle favourite ────────────────────────────────────────── */
+function toggleFav(weatherData) {
+  const { city } = weatherData;
+  if (state.favSet.has(city)) {
+    state.favSet.delete(city);
   } else {
-    state.favorites.add(code);
+    state.favSet.add(city);
   }
+  saveFavs();
+  repaintGrid();
 }
 
-/* ─────────────────────────────────────────────
-   DEBOUNCE
-──────────────────────────────────────────── */
-function debounce(fn, delay = 300) {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-}
+/* ── Load initial or searched cities ────────────────────────── */
+async function loadCities(cityNames) {
+  hideAllStates();
+  grid.innerHTML = '';
+  document.getElementById('loading-state').hidden = false;
 
-/* ─────────────────────────────────────────────
-   EVENTS
-──────────────────────────────────────────── */
-searchInput.addEventListener(
-  "input",
-  debounce((e) => {
-    state.query = e.target.value.trim();
-    updateUI();
-  }, 250)
-);
-
-regionSelect.addEventListener("change", (e) => {
-  state.region = e.target.value;
-  updateUI();
-});
-
-sortSelect.addEventListener("change", (e) => {
-  state.sort = e.target.value;
-  updateUI();
-});
-
-detailClose.addEventListener("click", closeDetail);
-overlay.addEventListener("click", closeDetail);
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeDetail();
-});
-
-/* ─────────────────────────────────────────────
-   FAVORITES TOGGLE UI
-──────────────────────────────────────────── */
-favToggle.addEventListener("click", () => {
-  state.showFavs = !state.showFavs;
-
-  favToggle.classList.toggle("active", state.showFavs);
-  favToggle.setAttribute("aria-pressed", String(state.showFavs));
-
-  favToggle.textContent = state.showFavs
-    ? "★ Favourites"
-    : "☆ Favourites";
-
-  updateUI();
-});
-
-/* ─────────────────────────────────────────────
-   INIT APP
-──────────────────────────────────────────── */
-async function init() {
   try {
-    state.loading = true;
-    renderSkeletons(grid, 16);
-
-    state.allCountries = await fetchAllCountries();
-
-    state.loading = false;
-    updateUI();
-
-    // Open country from URL hash
-    const hash = window.location.hash.slice(1);
-    if (hash) {
-      openDetail(hash.toUpperCase());
-    }
+    const data = await fetchManyCities(cityNames);
+    state.allData = data;
+    document.getElementById('loading-state').hidden = true;
+    repaintGrid();
   } catch (err) {
-    state.error = err.message;
-    renderError(grid, state.error, init);
+    console.error('loadCities error:', err);
+    document.getElementById('loading-state').hidden = true;
+    document.getElementById('error-state').hidden   = false;
+    document.getElementById('error-msg').textContent =
+      `Could not load weather: ${err.message}`;
   }
 }
 
-init();
+/* ── Detail panel ───────────────────────────────────────────── */
+async function openDetail(weatherData) {
+  // Show overlay immediately with loading state
+  overlay.hidden = false;
+  document.getElementById('detail-loading').hidden  = false;
+  document.getElementById('detail-content').hidden  = true;
+  document.getElementById('detail-error').hidden    = true;
+
+  // Trap focus in overlay
+  detailClose.focus();
+
+  try {
+    // Re-fetch detail for this city to get full hourly + daily data
+    const detail = await fetchCityDetail(weatherData.city);
+
+    renderDetail(overlay, detail);
+    document.getElementById('detail-loading').hidden = true;
+    document.getElementById('detail-content').hidden = false;
+  } catch (err) {
+    console.error('openDetail error:', err);
+    document.getElementById('detail-loading').hidden    = true;
+    document.getElementById('detail-error').hidden      = false;
+    document.getElementById('detail-error-msg').textContent =
+      `Could not load details: ${err.message}`;
+  }
+}
+
+function closeDetail() {
+  overlay.hidden = true;
+}
+
+/* ── Search handler (debounced for typing, immediate for button) */
+function handleSearch(immediate = false) {
+  const val = searchInput.value.trim();
+
+  if (immediate) {
+    if (!val) {
+      // If blank, reset to default cities
+      state.query = '';
+      loadCities(DEFAULT_CITIES);
+    } else {
+      // Search: load just that city
+      state.query = val;
+      loadCities([val]);
+    }
+    return;
+  }
+
+  // Inline filter while typing (no network call)
+  clearTimeout(state.debounceTimer);
+  state.debounceTimer = setTimeout(() => {
+    state.query = val;
+    repaintGrid();
+  }, 280);
+}
+
+/* ── Events ─────────────────────────────────────────────────── */
+
+// Search
+searchBtn.addEventListener('click', () => handleSearch(true));
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleSearch(true);
+});
+searchInput.addEventListener('input', () => handleSearch(false));
+
+// Filters
+filterBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    filterBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.filter = btn.dataset.filter;
+    repaintGrid();
+  });
+});
+
+// Retry
+retryBtn.addEventListener('click', () => loadCities(DEFAULT_CITIES));
+
+// Detail overlay close
+detailClose.addEventListener('click', closeDetail);
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) closeDetail();
+});
+
+// Keyboard: Escape closes detail
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !overlay.hidden) closeDetail();
+});
+
+/* ── Boot ────────────────────────────────────────────────────── */
+loadCities(DEFAULT_CITIES);

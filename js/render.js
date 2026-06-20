@@ -1,314 +1,202 @@
-/* ─────────────────────────────────────────────
-   NUMBER FORMATTING HELPERS
-──────────────────────────────────────────── */
-export function formatNumber(n) {
-  if (!n && n !== 0) return "N/A";
+/**
+ * render.js — Display layer
+ * Pure DOM construction from clean data objects.
+ * Never fetches data. Never modifies global state.
+ */
 
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + "B";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
-
-  return n.toLocaleString();
+/* ── Wind direction code ──────────────────────────────────────── */
+function windDirLabel(deg) {
+  if (deg == null) return '—';
+  const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  return dirs[Math.round(deg / 45) % 8];
 }
 
-export function formatArea(area) {
-  if (!area) return "N/A";
-  return `${area.toLocaleString()} km²`;
+/* ── Day name from ISO date string ──────────────────────────── */
+function shortDay(isoDate) {
+  if (!isoDate) return '';
+  const d = new Date(isoDate + 'T12:00:00');
+  return d.toLocaleDateString('en', { weekday: 'short' });
 }
 
-/* ─────────────────────────────────────────────
-   REGION COLORS (UI DESIGN SYSTEM)
-──────────────────────────────────────────── */
-const REGION_COLORS = {
-  Africa: "#F59E0B",
-  Americas: "#10B981",
-  Asia: "#6366F1",
-  Europe: "#3B82F6",
-  Oceania: "#EC4899",
-  Antarctic: "#94A3B8",
-  Unknown: "#64748B",
-};
-
-export function regionColor(region) {
-  return REGION_COLORS[region] || "#64748B";
+/* ── Hour label from ISO datetime string ────────────────────── */
+function hourLabel(isoTime) {
+  if (!isoTime) return '';
+  const d = new Date(isoTime);
+  return d.toLocaleTimeString('en', { hour: 'numeric', hour12: true });
 }
 
-/* ─────────────────────────────────────────────
-   BUILD COUNTRY CARD
-──────────────────────────────────────────── */
-export function buildCard(country, onClick) {
-  const card = document.createElement("article");
+/* ── Condition → card accent colour ────────────────────────── */
+function conditionAccent(condition) {
+  const label = condition?.label?.toLowerCase() ?? '';
+  if (label.includes('thunder') || label.includes('storm'))  return '#6366f1';
+  if (label.includes('rain')    || label.includes('drizzle') || label.includes('shower')) return '#3b82f6';
+  if (label.includes('snow')    || label.includes('ice'))    return '#7dd3fc';
+  if (label.includes('fog'))    return '#94a3b8';
+  if (label.includes('cloud')   || label.includes('overcast')) return '#a8b5c8';
+  if (label.includes('clear')   || label.includes('mainly clear')) return '#f59e0b';
+  return '#1d6fe8';
+}
 
-  card.className = "country-card";
-  card.setAttribute("role", "button");
-  card.setAttribute("tabindex", "0");
-  card.setAttribute("aria-label", `View details for ${country.name}`);
+/* ── Classify weather for filter ───────────────────────────── */
+export function classifyWeather(weatherData) {
+  const { temp, condition } = weatherData.current;
+  const label = condition?.label?.toLowerCase() ?? '';
+  const tags = ['all'];
 
-  const accent = regionColor(country.region);
+  if (label.includes('clear') || label.includes('mainly clear')) tags.push('sunny');
+  if (label.includes('cloud') || label.includes('overcast'))      tags.push('cloudy');
+  if (label.includes('rain')  || label.includes('drizzle') || label.includes('shower') || label.includes('thunder')) tags.push('rainy');
+  if (temp !== null && temp < 10) tags.push('cold');
 
-  card.innerHTML = `
-    <div class="card-flag" style="background-image:url('${country.flag}')" role="img" aria-label="${country.flagAlt}">
-      <div class="card-flag-overlay"></div>
-      <span class="card-region-badge" style="--region-color:${accent}">
-        ${country.region}
-      </span>
+  return tags;
+}
+
+/* ── Render a single city card ──────────────────────────────── */
+export function renderCard(weatherData, { onOpen, onFav, isFav }) {
+  const { city, country, current } = weatherData;
+  const { temp, feelsLike, humidity, windSpeed, condition } = current;
+
+  const li = document.createElement('li');
+  li.className = 'city-card';
+  li.setAttribute('role', 'listitem');
+  li.setAttribute('tabindex', '0');
+  li.setAttribute('aria-label', `${city}, ${country}. ${Math.round(temp)}°C, ${condition.label}. Click for details.`);
+  li.style.setProperty('--card-accent', conditionAccent(condition));
+
+  // Fav button
+  const favBtn = document.createElement('button');
+  favBtn.className = 'fav-btn' + (isFav ? ' active' : '');
+  favBtn.textContent = '★';
+  favBtn.setAttribute('aria-label', isFav ? `Remove ${city} from favourites` : `Add ${city} to favourites`);
+  favBtn.setAttribute('aria-pressed', String(isFav));
+
+  li.innerHTML = `
+    <div class="card-header">
+      <div>
+        <div class="card-city">${city}</div>
+        <div class="card-country">${country}</div>
+        <div class="card-condition-text">${condition.label}</div>
+      </div>
+      <div class="card-condition-icon" aria-hidden="true">${condition.icon}</div>
     </div>
-
-    <div class="card-body">
-      <div class="card-emoji">${country.emoji || "🌍"}</div>
-
-      <h2 class="card-name">${country.name}</h2>
-
-      <p class="card-capital">
-        ${country.capital || "N/A"}
-      </p>
-
-      <div class="card-stats">
-        <div class="card-stat">
-          <span class="stat-icon">👥</span>
-          <span class="stat-value">
-            ${formatNumber(country.population)}
-          </span>
-        </div>
-
-        <div class="card-stat">
-          <span class="stat-icon">📐</span>
-          <span class="stat-value">
-            ${formatArea(country.area)}
-          </span>
-        </div>
+    <div class="card-temp-row">
+      <div class="card-temp">${temp !== null ? Math.round(temp) : '—'}°</div>
+      <div class="card-feels">Feels like<br>${feelsLike !== null ? Math.round(feelsLike) + '°C' : '—'}</div>
+    </div>
+    <div class="card-meta">
+      <div class="card-meta-item">
+        <span class="card-meta-label">HUM</span>
+        <span>${humidity !== null ? humidity + '%' : '—'}</span>
+      </div>
+      <div class="card-meta-item">
+        <span class="card-meta-label">WIND</span>
+        <span>${windSpeed !== null ? Math.round(windSpeed) + ' km/h' : '—'}</span>
       </div>
     </div>
   `;
 
-  // Click + keyboard accessibility
-  const activate = (e) => {
-    if (e.type === "click" || e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onClick(country.code);
-    }
-  };
+  li.appendChild(favBtn);
 
-  card.addEventListener("click", activate);
-  card.addEventListener("keydown", activate);
-
-  return card;
-}
-
-/* ─────────────────────────────────────────────
-   RENDER GRID
-──────────────────────────────────────────── */
-export function renderGrid(countries, container, onClick) {
-  container.innerHTML = "";
-
-  if (!countries.length) return;
-
-  const fragment = document.createDocumentFragment();
-
-  countries.forEach((country) => {
-    fragment.appendChild(buildCard(country, onClick));
+  // Events
+  li.addEventListener('click', (e) => {
+    if (e.target === favBtn || favBtn.contains(e.target)) return;
+    onOpen(weatherData);
   });
 
-  container.appendChild(fragment);
+  li.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onOpen(weatherData);
+    }
+  });
+
+  favBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onFav(weatherData);
+  });
+
+  return li;
 }
 
-/* ─────────────────────────────────────────────
-   DETAIL VIEW RENDER
-──────────────────────────────────────────── */
-export function renderDetail(country, borders, panel) {
-  const accent = regionColor(country.region);
+/* ── Render the full card grid ──────────────────────────────── */
+export function renderGrid(grid, allData, { filter, query, onOpen, onFav, favSet }) {
+  grid.innerHTML = '';
 
-  panel.innerHTML = `
-    <!-- HERO -->
-    <div class="detail-hero" style="background-image:url('${country.flag}')" role="img" aria-label="${country.flagAlt}">
-      <div class="detail-hero-overlay"></div>
+  const filtered = allData.filter(d => {
+    const tags  = classifyWeather(d);
+    const matchFilter = filter === 'all' || tags.includes(filter);
+    const matchQuery  = !query || d.city.toLowerCase().includes(query.toLowerCase());
+    return matchFilter && matchQuery;
+  });
 
-      <div class="detail-hero-content">
-        <span class="detail-emoji">${country.emoji || "🌍"}</span>
-
-        <h1 class="detail-name">${country.name}</h1>
-
-        ${
-          country.officialName !== country.name
-            ? `<p class="detail-official">${country.officialName}</p>`
-            : ""
-        }
-
-        <span class="detail-region-badge" style="--region-color:${accent}">
-          ${country.region}${country.subregion ? ` · ${country.subregion}` : ""}
-        </span>
-      </div>
-    </div>
-
-    <!-- BODY -->
-    <div class="detail-body">
-
-      <!-- STATS -->
-      <div class="detail-stats-row">
-        <div class="detail-stat-box">
-          <span class="dstat-label">Population</span>
-          <span class="dstat-value">${country.population.toLocaleString()}</span>
-        </div>
-
-        <div class="detail-stat-box">
-          <span class="dstat-label">Area</span>
-          <span class="dstat-value">${formatArea(country.area)}</span>
-        </div>
-
-        <div class="detail-stat-box">
-          <span class="dstat-label">Capital</span>
-          <span class="dstat-value">${country.capital}</span>
-        </div>
-
-        <div class="detail-stat-box">
-          <span class="dstat-label">UN Member</span>
-          <span class="dstat-value">
-            ${country.unMember ? "✓ Yes" : "✗ No"}
-          </span>
-        </div>
-      </div>
-
-      <!-- FACTS -->
-      <div class="detail-facts">
-        ${detailRow("🗣️ Languages", country.languages.join(", ") || "N/A")}
-        ${detailRow("💱 Currencies", country.currencies.join(", ") || "N/A")}
-        ${detailRow("🕐 Timezones", country.timezones.join(", ") || "N/A")}
-        ${detailRow("🌍 Continents", country.continents.join(", ") || "N/A")}
-
-        ${
-          country.maps
-            ? `
-          <div class="detail-row">
-            <a href="${country.maps}" target="_blank" rel="noopener" class="maps-link">
-              📍 View on Google Maps ↗
-            </a>
-          </div>
-        `
-            : ""
-        }
-      </div>
-
-      <!-- BORDERS -->
-      ${
-        borders.length
-          ? `
-        <div class="detail-borders">
-          <h3 class="borders-heading">Bordering Countries</h3>
-
-          <div class="borders-grid">
-            ${borders
-              .map(
-                (b) => `
-              <button class="border-chip" data-code="${b.code}">
-                <img src="${b.flag}" alt="${b.name} flag" class="border-flag" />
-                <span>${b.name}</span>
-              </button>
-            `
-              )
-              .join("")}
-          </div>
-        </div>
-      `
-          : ""
-      }
-
-      <!-- COAT OF ARMS -->
-      ${
-        country.coatOfArms
-          ? `
-        <div class="detail-coa">
-          <h3 class="coa-heading">Coat of Arms</h3>
-          <img src="${country.coatOfArms}" alt="Coat of arms of ${country.name}" class="coa-img" />
-        </div>
-      `
-          : ""
-      }
-
-    </div>
-  `;
+  return { filtered, rendered: filtered.map(d => {
+    const card = renderCard(d, {
+      onOpen,
+      onFav,
+      isFav: favSet.has(d.city),
+    });
+    grid.appendChild(card);
+    return card;
+  })};
 }
 
-/* ─────────────────────────────────────────────
-   DETAIL ROW HELPER
-──────────────────────────────────────────── */
-function detailRow(label, value) {
-  return `
-    <div class="detail-row">
-      <span class="detail-row-label">${label}</span>
-      <span class="detail-row-value">${value}</span>
+/* ── Render detail panel content ────────────────────────────── */
+export function renderDetail(panel, weatherData) {
+  const { city, country, current, daily, hourly } = weatherData;
+  const {
+    temp, feelsLike, humidity, windSpeed, windDir,
+    pressure, visibility, precipitation, condition,
+  } = current;
+
+  panel.querySelector('#detail-country').textContent     = country;
+  panel.querySelector('#detail-city-name').textContent   = city;
+  panel.querySelector('#detail-condition').textContent   = `${condition.icon}  ${condition.label}`;
+  panel.querySelector('#detail-temp').textContent        = temp !== null ? `${Math.round(temp)}°C` : '—';
+  panel.querySelector('#detail-feels').textContent       = feelsLike !== null ? `Feels like ${Math.round(feelsLike)}°C` : '';
+
+  // Stats
+  const stats = [
+    { label: 'Humidity',     value: humidity    !== null ? `${humidity}%`              : '—' },
+    { label: 'Wind',         value: windSpeed   !== null ? `${Math.round(windSpeed)} km/h ${windDirLabel(windDir)}` : '—' },
+    { label: 'Pressure',     value: pressure    !== null ? `${Math.round(pressure)} hPa` : '—' },
+    { label: 'Visibility',   value: visibility  !== null ? `${(visibility / 1000).toFixed(1)} km` : '—' },
+    { label: 'Precipitation',value: precipitation !== null ? `${precipitation} mm`     : '—' },
+  ];
+
+  const statsEl = panel.querySelector('#detail-stats');
+  statsEl.innerHTML = stats.map(s => `
+    <div class="stat-card">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value">${s.value}</div>
     </div>
-  `;
+  `).join('');
+
+  // Forecast
+  const forecastEl = panel.querySelector('#forecast-row');
+  forecastEl.innerHTML = daily.map(d => `
+    <div class="forecast-day">
+      <div class="forecast-day-name">${shortDay(d.date)}</div>
+      <div class="forecast-icon">${d.weather.icon}</div>
+      <div class="forecast-hi">${d.hi !== null ? Math.round(d.hi) + '°' : '—'}</div>
+      <div class="forecast-lo">${d.lo !== null ? Math.round(d.lo) + '°' : '—'}</div>
+    </div>
+  `).join('');
+
+  // Hourly
+  const hourlyEl = panel.querySelector('#hourly-row');
+  hourlyEl.innerHTML = hourly.map(h => `
+    <div class="hourly-item">
+      <div class="hourly-time">${hourLabel(h.time)}</div>
+      <div class="hourly-icon">${h.weather.icon}</div>
+      <div class="hourly-temp">${h.temp !== null ? Math.round(h.temp) + '°' : '—'}</div>
+    </div>
+  `).join('');
 }
 
-/* ─────────────────────────────────────────────
-   SKELETON LOADING UI
-──────────────────────────────────────────── */
-export function renderSkeletons(container, count = 12) {
-  container.innerHTML = Array.from({ length: count })
-    .map(
-      () => `
-    <div class="skeleton-card">
-      <div class="skel skel-flag"></div>
-      <div class="skel-body">
-        <div class="skel skel-line wide"></div>
-        <div class="skel skel-line medium"></div>
-        <div class="skel skel-row">
-          <div class="skel skel-line short"></div>
-          <div class="skel skel-line short"></div>
-        </div>
-      </div>
-    </div>
-  `
-    )
-    .join("");
-}
-
-/* ─────────────────────────────────────────────
-   EMPTY STATE
-──────────────────────────────────────────── */
-export function renderEmpty(container, query) {
-  container.innerHTML = `
-    <div class="empty-state">
-      <div class="empty-icon">🔍</div>
-      <h3>No results for "${query}"</h3>
-      <p>Try searching by country name, capital, or region.</p>
-    </div>
-  `;
-}
-
-/* ─────────────────────────────────────────────
-   ERROR STATE
-──────────────────────────────────────────── */
-export function renderError(container, message, onRetry) {
-  container.innerHTML = `
-    <div class="error-state">
-      <div class="error-icon">⚠️</div>
-      <h3>Something went wrong</h3>
-      <p>${message}</p>
-      <button class="retry-btn" id="retry-btn">Try again</button>
-    </div>
-  `;
-
-  container.querySelector("#retry-btn")?.addEventListener("click", onRetry);
-}
-
-/* ─────────────────────────────────────────────
-   STATS BAR (reduce() requirement)
-──────────────────────────────────────────── */
-export function renderStatsBar(countries, el) {
-  if (!countries.length) {
-    el.textContent = "";
-    return;
+/* ── State helpers ──────────────────────────────────────────── */
+export function showState(ids, visibleId) {
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = (id !== visibleId);
   }
-
-  const totalPop = countries.reduce((sum, c) => sum + c.population, 0);
-  const totalArea = countries.reduce((sum, c) => sum + (c.area || 0), 0);
-  const regions = new Set(countries.map((c) => c.region)).size;
-
-  el.innerHTML = `
-    <span>${countries.length} <em>countries</em></span>
-    <span>${formatNumber(totalPop)} <em>people</em></span>
-    <span>${formatNumber(totalArea)} km² <em>land</em></span>
-    <span>${regions} <em>regions</em></span>
-  `;
 }

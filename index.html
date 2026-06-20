@@ -3,122 +3,134 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <title>World Explorer — Discover Every Country</title>
-
-  <meta name="description" content="Browse, search, and explore every country in the world. Powered by REST Countries API." />
-
+  <title>Skyline — Multi-City Weather Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
-
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>" />
 </head>
-
 <body>
 
-  <!-- ── Header ── -->
-  <header class="site-header" role="banner">
+  <!-- HEADER -->
+  <header class="site-header">
     <div class="header-inner">
-      <div class="site-logo">🌍 World<span>Explorer</span></div>
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">◎</span>
+        <span class="brand-name">Skyline</span>
+      </div>
+      <p class="brand-tagline">Live weather for cities you care about</p>
     </div>
   </header>
 
-  <!-- ── Stats bar ── -->
-  <div class="stats-bar" role="status" aria-live="polite">
-    <div class="stats-inner">
-      <div id="stats-bar" aria-hidden="true"></div>
+  <!-- MAIN -->
+  <main>
+
+    <!-- SEARCH SECTION -->
+    <section class="search-section" aria-label="City search">
+      <div class="search-inner">
+        <div class="search-box-wrap">
+          <label for="city-search" class="visually-hidden">Search for a city</label>
+          <input
+            id="city-search"
+            class="search-input"
+            type="search"
+            placeholder="Search a city… e.g. Tokyo, Lagos, Berlin"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="search-btn" id="search-btn" aria-label="Search">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </button>
+        </div>
+        <div class="filter-row" role="group" aria-label="Filter by condition">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="sunny">☀ Sunny</button>
+          <button class="filter-btn" data-filter="cloudy">☁ Cloudy</button>
+          <button class="filter-btn" data-filter="rainy">🌧 Rainy</button>
+          <button class="filter-btn" data-filter="cold">❄ Cold</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CITY GRID -->
+    <section class="grid-section" aria-label="City weather cards">
+      <div class="grid-inner">
+        <div id="city-grid" class="city-grid" role="list">
+          <!-- Cards injected by render.js -->
+        </div>
+        <!-- States -->
+        <div id="loading-state" class="state-block loading-state" aria-live="polite" hidden>
+          <div class="spinner" aria-label="Loading weather data"></div>
+          <p>Fetching weather data…</p>
+        </div>
+        <div id="error-state" class="state-block error-state" aria-live="assertive" hidden>
+          <p class="state-icon">⚡</p>
+          <p class="state-msg" id="error-msg">Something went wrong.</p>
+          <button class="retry-btn" id="retry-btn">Try again</button>
+        </div>
+        <div id="empty-state" class="state-block empty-state" aria-live="polite" hidden>
+          <p class="state-icon">🔭</p>
+          <p class="state-msg">No cities match <strong id="empty-query"></strong>.</p>
+          <p class="state-hint">Try a different name or remove a filter.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL PANEL (modal-style) -->
+    <div id="detail-overlay" class="detail-overlay" role="dialog" aria-modal="true" aria-labelledby="detail-city-name" hidden>
+      <div class="detail-panel">
+        <button class="detail-close" id="detail-close" aria-label="Close detail view">✕</button>
+
+        <!-- Loading state inside panel -->
+        <div id="detail-loading" class="detail-loading" hidden>
+          <div class="spinner"></div>
+          <p>Loading details…</p>
+        </div>
+
+        <!-- Content -->
+        <div id="detail-content" class="detail-content" hidden>
+          <div class="detail-hero">
+            <div class="detail-hero-left">
+              <p class="detail-country" id="detail-country"></p>
+              <h2 class="detail-city-name" id="detail-city-name"></h2>
+              <p class="detail-condition" id="detail-condition"></p>
+            </div>
+            <div class="detail-hero-right">
+              <p class="detail-temp-big" id="detail-temp"></p>
+              <p class="detail-feels" id="detail-feels"></p>
+            </div>
+          </div>
+
+          <div class="detail-stats-grid" id="detail-stats"></div>
+
+          <div class="detail-section">
+            <h3 class="detail-section-title">7-Day Forecast</h3>
+            <div class="forecast-row" id="forecast-row"></div>
+          </div>
+
+          <div class="detail-section">
+            <h3 class="detail-section-title">Hourly Today</h3>
+            <div class="hourly-row" id="hourly-row"></div>
+          </div>
+        </div>
+
+        <!-- Error state inside panel -->
+        <div id="detail-error" class="state-block error-state" hidden>
+          <p class="state-icon">⚡</p>
+          <p class="state-msg" id="detail-error-msg">Could not load details.</p>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <!-- ── Controls ── -->
-  <div class="controls-bar" role="search">
-
-    <!-- Search -->
-    <div class="search-wrap">
-      <span class="search-icon" aria-hidden="true">🔍</span>
-      <input
-        type="search"
-        id="search"
-        placeholder="Search by country or capital…"
-        aria-label="Search countries"
-        autocomplete="off"
-        spellcheck="false"
-      />
-    </div>
-
-    <!-- Region filter -->
-    <select id="region-filter" class="controls-select" aria-label="Filter by region">
-      <option value="all">All regions</option>
-      <option value="Africa">Africa</option>
-      <option value="Americas">Americas</option>
-      <option value="Asia">Asia</option>
-      <option value="Europe">Europe</option>
-      <option value="Oceania">Oceania</option>
-      <option value="Antarctic">Antarctic</option>
-    </select>
-
-    <!-- Sort -->
-    <select id="sort-by" class="controls-select" aria-label="Sort countries by">
-      <option value="name">A → Z</option>
-      <option value="population">By population</option>
-      <option value="area">By area</option>
-    </select>
-
-    <!-- Favorites toggle -->
-    <button
-      id="fav-toggle"
-      aria-pressed="false"
-      title="Show favourites only"
-    >
-      ☆ Favourites
-    </button>
-
-    <!-- Result count -->
-    <span class="result-count" id="result-count" aria-live="polite"></span>
-  </div>
-
-  <!-- ── Grid ── -->
-  <main class="grid-wrap">
-    <div id="country-grid" role="list" aria-label="Countries"></div>
   </main>
 
-  <!-- ── Overlay ── -->
-  <div id="overlay" aria-hidden="true"></div>
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <p>Data from <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> &amp; <a href="https://geocoding-api.open-meteo.com" target="_blank" rel="noopener">Open-Meteo Geocoding</a>. No API key required.</p>
+  </footer>
 
-  <!-- ── Detail panel ── -->
-  <aside
-    id="detail-panel"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Country details"
-    aria-hidden="true"
-  >
-    <button id="detail-close" class="detail-close-btn" aria-label="Close detail panel">
-      ← Back to all countries
-    </button>
-
-    <div id="detail-loading" role="status">
-      Loading country details…
-    </div>
-
-    <div id="detail-error" hidden role="alert"></div>
-
-    <div id="detail-inner"></div>
-  </aside>
-
-  <!-- ── JS (ONLY ONE SCRIPT — IMPORTANT FOR CAPSTONE) ── -->
   <script type="module" src="js/main.js"></script>
-
-  <!-- ── Accessibility sync for panel state ── -->
-  <script>
-    const panel = document.getElementById('detail-panel');
-
-    const observer = new MutationObserver(() => {
-      const isOpen = panel.classList.contains('open');
-      panel.setAttribute('aria-hidden', String(!isOpen));
-    });
-
-    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
-  </script>
-
 </body>
 </html>
